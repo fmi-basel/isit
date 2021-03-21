@@ -1,0 +1,29 @@
+from setuptools import setup, find_packages
+
+contrib = [
+    'Raphael Ortiz',
+]
+
+# setup.
+setup(
+    name='isit',
+    version='0.1',
+    description='2D/3D instance segmentation iterative training',
+    author=', '.join(contrib),
+    packages=find_packages(exclude=['tests']),
+    install_requires=[
+        'numpy',
+        'pandas',
+        'scipy',
+        'scikit-image',
+        'imagecodecs',
+        'pytest',
+        'luigi',
+        'dl-utils @ git+https://github.com/fmi-basel/dl-utils',
+        'improc @ git+https://github.com/fmi-basel/improc',
+        'inter_view @ git+https://github.com/fmi-basel/inter-view',
+    ],
+    # ~entry_points={
+    # ~TODO
+    # ~},
+    zip_safe=False)
