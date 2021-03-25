@@ -19,13 +19,13 @@ class BuildTrainingRecordBaseTask(luigi.Task):
     '''
 
     # yapf: disable
-    sample_goup_keys = luigi.ListParameter(['fname'], description="pandas grouping keys to get one sample per group from the input collection")
+    sample_group_keys = luigi.ListParameter(['fname'], description="pandas grouping keys to get one sample per group from the input collection")
     input_filters = luigi.parameter.OptionalParameter(None, description="""pandas query string specifying elements to process.e.g. 'mag in [20]'""")
     raw_filter = luigi.Parameter('layer=="raw"', description="pandas query string to get the input image")
     annot_filter = luigi.Parameter('layer=="annot"', description="pandas query string to get the annot image")
     min_patch_size = luigi.TupleParameter(description='minimum patch size after resampling to model_spacing. Pads with reflection if smaller')
     patch_margins = luigi.TupleParameter(description='cropping margins around labeled region')
-    model_spacing = luigi.TupleParameter((1., 1.), description='tuple indicating the pixel/voxel size on which the model is trained')
+    model_spacing = luigi.TupleParameter(description='tuple indicating the pixel/voxel size on which the model is trained')
     training_dir = luigi.Parameter()
     record_name = luigi.Parameter()
 
@@ -72,7 +72,7 @@ class BuildTrainingRecordBaseTask(luigi.Task):
             df = df.query(self.input_filters)
 
         # randomize sample order, e.g mixes timepoints
-        record_input = list(df.groupby(list(self.sample_goup_keys)))
+        record_input = list(df.groupby(list(self.sample_group_keys)))
         random.seed(self.seed)
         random.shuffle(record_input)
 
@@ -178,7 +178,7 @@ class BuildInstanceRecordTask(BuildTrainingRecordBaseTask):
 class MultiInstanceRecordTask(luigi.Task):
     '''~wrapper task to split a training data collection into multiple training records'''
 
-    multi_records_goup_keys = luigi.ListParameter(
+    multi_records_group_keys = luigi.ListParameter(
         None,
         description=
         "pandas grouping keys to get subframe per training record from the input collection"
@@ -191,7 +191,7 @@ class MultiInstanceRecordTask(luigi.Task):
 
     def _get_record_tasks(self):
         record_tasks = []
-        if self.multi_records_goup_keys is None:
+        if self.multi_records_group_keys is None:
             record_tasks.append(
                 BuildInstanceRecordTask(seed=57,
                                         record_name='complete_record'))
@@ -202,14 +202,14 @@ class MultiInstanceRecordTask(luigi.Task):
                 df = df.query(self.input_filters)
 
             group_ids = [
-                g[0] for g in df.groupby(list(self.multi_records_goup_keys))
+                g[0] for g in df.groupby(list(self.multi_records_group_keys))
             ]
-            if len(self.multi_records_goup_keys) == 1:
+            if len(self.multi_records_group_keys) == 1:
                 group_ids = [(g, ) for g in group_ids]
 
             for group_id in group_ids:
                 group_query = []
-                for key, val in zip(self.multi_records_goup_keys, group_id):
+                for key, val in zip(self.multi_records_group_keys, group_id):
                     if isinstance(val, str):
                         group_query.append('{}=="{}"'.format(key, val))
                     else:

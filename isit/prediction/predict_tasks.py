@@ -132,7 +132,7 @@ class SegmentInstancesTask(LabelCleaningParams, GPUTask):
         self.output().save(df_out, self.param_kwargs)
 
 
-class batchedSegmentInstancesTask(SegmentInstancesTask):
+class BatchedSegmentInstancesTask(SegmentInstancesTask):
     '''Segments planes of 3D stacks as independent 2D images'''
     def _predict_single_image(self, in_path, out_path, model, lock):
         from .apply_model import apply_instance_seg_model

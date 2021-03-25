@@ -25,7 +25,7 @@ class BuildInstanceModelMixin:
     n_steps = luigi.IntParameter(5, description='number of steps of delta loop')
     suffix = luigi.Parameter('', description='suffix appended to model name')
     n_classes = luigi.IntParameter(2, description='number of semantic classes')
-    model_spacing = luigi.TupleParameter((1., ), description='scaling of embedding coordinates, e.g. voxel size.')
+    model_spacing = luigi.TupleParameter(description='scaling of embedding coordinates, e.g. voxel size.')
     # yapf: enable
 
     @property

@@ -324,17 +324,17 @@ class InstanceModelExportTask(InferenceModelExportBaseTask):
             embeddings = embeddings[0]
             fg_mask = classes[0, ..., 1] > 0.5
 
-            with tf.device('/CPU'):
-                labels = embeddings_to_labels(
-                    embeddings,
-                    fg_mask,
-                    peak_min_distance=2 * self.
-                    intra_margin,  #0.5 * (self.intra_margin + self.inter_margin),
-                    spacing=self.model_spacing,
-                    min_count=2)
+            # ~with tf.device('/CPU'):
+            labels = embeddings_to_labels(
+                embeddings,
+                fg_mask,
+                peak_min_distance=2 * self.
+                intra_margin,  #0.5 * (self.intra_margin + self.inter_margin),
+                spacing=self.model_spacing,
+                min_count=2)
 
-                labels = tf.cast(labels, tf.uint16)
-                return {'labels': labels}
+            labels = tf.cast(labels, tf.uint16)
+            return {'labels': labels}
 
         @tf.function(input_signature=[])
         def get_model_spacing():
