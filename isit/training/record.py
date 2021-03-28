@@ -178,16 +178,10 @@ class BuildInstanceRecordTask(BuildTrainingRecordBaseTask):
 class MultiInstanceRecordTask(luigi.Task):
     '''~wrapper task to split a training data collection into multiple training records'''
 
-    multi_records_group_keys = luigi.ListParameter(
-        None,
-        description=
-        "pandas grouping keys to get subframe per training record from the input collection"
-    )
-    input_filters = luigi.parameter.OptionalParameter(
-        None,
-        description=
-        """pandas query string specifying elements to process.e.g. 'mag in [20]'"""
-    )
+    # yapf: disable
+    multi_records_group_keys = luigi.ListParameter(None, description="pandas grouping keys to get subframe per training record from the input collection")
+    input_filters = luigi.parameter.OptionalParameter(None, description="""pandas query string specifying elements to process.e.g. 'mag in [20]'""")
+    # yapf: enable
 
     def _get_record_tasks(self):
         record_tasks = []

@@ -86,6 +86,7 @@ class TrainingMixin:
     valid_batch_size = luigi.IntParameter(description='validation batch size.')
     train_batches_per_epoch = luigi.IntParameter(description='Number of training batches per epoch (infinitely repeating dataset)')
     valid_batches = luigi.IntParameter(description='Number of validation batches per epoch (infinitely repeating dataset)')
+    balance_records = luigi.BoolParameter(False, description='whether to balances training datasets by repeating smaller subsets more frequently', parsing=luigi.BoolParameter.EXPLICIT_PARSING)
     epochs = luigi.IntParameter(description='number of training epochs.')
     lr_min = luigi.FloatParameter(description='minimum learning rate.')
     lr_max = luigi.FloatParameter(description='maximum learning rate.')
@@ -202,7 +203,8 @@ class ModelFittingBaseTask(GPUTask, BuildInstanceModelMixin, AugmentationMixin,
                                       shuffle=True,
                                       drop_remainder=False,
                                       cache_after_parse=False,
-                                      patch_size=self.patch_size)
+                                      patch_size=self.patch_size,
+                                      balance_records=self.balance_records)
 
             validset = create_dataset([t.path for t in self.input()['valid']],
                                       batch_size=self.valid_batch_size,
@@ -210,20 +212,14 @@ class ModelFittingBaseTask(GPUTask, BuildInstanceModelMixin, AugmentationMixin,
                                       transforms=[self.split_samples],
                                       drop_remainder=False,
                                       cache_after_parse=False,
-                                      patch_size=self.patch_size)
+                                      patch_size=self.patch_size,
+                                      balance_records=self.balance_records)
 
             trainset = trainset.repeat()
             validset = validset.repeat()
 
             model = self.construct_model()
             model.save(model_dir)
-
-            if self.plot_dataset:
-                logger = logging.getLogger('luigi-interface')
-                logger.info('plotting training examples to pdf')
-                plot_instance_dataset(
-                    os.path.join(model_dir, 'training_samples.pdf'), trainset,
-                    100)
 
             model.compile(
                 optimizer=tf.keras.optimizers.Adam(learning_rate=self.lr_max),
@@ -232,6 +228,13 @@ class ModelFittingBaseTask(GPUTask, BuildInstanceModelMixin, AugmentationMixin,
 
             if self.resume_weights:
                 model.load_weights(self.resume_weights)
+
+            if self.plot_dataset:
+                logger = logging.getLogger('luigi-interface')
+                logger.info('plotting training examples to pdf')
+                plot_instance_dataset(
+                    os.path.join(model_dir, 'training_samples.pdf'), trainset,
+                    100)
 
             history = model.fit(trainset,
                                 validation_data=validset,
@@ -306,6 +309,16 @@ class InstanceModelExportTask(InferenceModelExportBaseTask):
         from dlutils.postprocessing.voting import embeddings_to_labels
 
         @tf.function(input_signature=[
+            tf.TensorSpec(shape=(None, ) + self.input_shape, dtype=tf.float32)
+        ])
+        def model_fun(img):
+            '''applies the trained model without pre/post proc. Useful for tile processing
+            '''
+            embeddings, classes = model(img, training=False)
+
+            return {'embeddings': embeddings, 'classes': classes}
+
+        @tf.function(input_signature=[
             tf.TensorSpec(shape=self.input_shape[:-1], dtype=tf.uint16)
         ])
         def instance_seg_inference_fun(img):
@@ -325,24 +338,27 @@ class InstanceModelExportTask(InferenceModelExportBaseTask):
             fg_mask = classes[0, ..., 1] > 0.5
 
             # ~with tf.device('/CPU'):
-            labels = embeddings_to_labels(
-                embeddings,
-                fg_mask,
-                peak_min_distance=2 * self.
-                intra_margin,  #0.5 * (self.intra_margin + self.inter_margin),
-                spacing=self.model_spacing,
-                min_count=2)
+            labels = embeddings_to_labels(embeddings,
+                                          fg_mask,
+                                          peak_min_distance=2 *
+                                          self.intra_margin,
+                                          spacing=self.model_spacing,
+                                          min_count=2)
 
             labels = tf.cast(labels, tf.uint16)
             return {'labels': labels}
 
         @tf.function(input_signature=[])
-        def get_model_spacing():
-            return {'spacing': tf.constant(self.model_spacing)}
+        def get_config():
+            return {
+                'spacing': tf.constant(self.model_spacing),
+                'peak_min_distance': tf.constant(2 * self.intra_margin)
+            }
 
         return {
             'pred_instance': instance_seg_inference_fun,
-            'get_model_spacing': get_model_spacing
+            'get_config': get_config,
+            'model_fun': model_fun,
         }
 
 

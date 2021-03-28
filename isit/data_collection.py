@@ -90,6 +90,4 @@ class ParseConfigCollectionTask(ParseCollectionTask):
         df = df.reset_index().apply(self.add_json_config,
                                     axis=1).set_index(list(self.index))
 
-        print(df.columns)
-
         self.output().save(df, self.param_kwargs)
