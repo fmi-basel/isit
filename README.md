@@ -55,7 +55,7 @@ LUIGI_CONFIG_PATH=./predict_config.cfg luigi --local-scheduler --module isit Bat
 
 ## Examples
 **2D-mip-org-seg**: organoids segmentation on overview images acquired on the yokogawa<br/>
-<img src="docs/2D_org.png" alt="TODO" height="600"/><br/><br/>
+<img src="docs/2D_org.png" height="600"/><br/><br/>
 
 **2D-nuclei-seg**: nuclei segmentation on organoid images acquired on the yokogawa<br/>
 <img src="docs/2D_nuclei.png" height="400"/><br/><br/>
