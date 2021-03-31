@@ -145,6 +145,7 @@ class BuildInstanceRecordTask(BuildTrainingRecordBaseTask):
             # tighter crop based on annotations/pad to minsize
             crop_mask = annot > 0
             if crop_mask.max() < 1:
+                # background label only --> take all, no cropping
                 crop_mask[:] = True
 
             raw = crop_object([raw],
