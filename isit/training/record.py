@@ -76,13 +76,16 @@ class BuildTrainingRecordBaseTask(luigi.Task):
         random.seed(self.seed)
         random.shuffle(record_input)
 
-        test_fraction = max(0., 1. - self.train_fraction - self.valid_fraction)
         n_samples = len(record_input)
-        probs = [self.train_fraction, self.valid_fraction, test_fraction]
-        split = np.random.choice([0, 1, 2],
-                                 size=n_samples,
-                                 replace=True,
-                                 p=probs)
+        idx = np.random.permutation(n_samples)
+        split = np.zeros(n_samples, dtype=np.int)
+        # up to train_split will belong to train fraction
+        train_split = int(n_samples * self.train_fraction)
+        # up to val_split will belong to val fraction
+        val_split = train_split + int(n_samples * (self.train_fraction + self.valid_fraction))
+        split[idx[train_split:val_split]] = 1
+        # everything after val_split will belong to test fraction
+        split[idx[val_split:]] = 2
         sets = {}
         for idx, split_name in enumerate(['train', 'valid', 'test']):
             inputs = [p for s, p in zip(split, record_input) if s == idx]
