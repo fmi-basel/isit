@@ -245,12 +245,18 @@ class ModelFittingBaseTask(GPUTask, BuildInstanceModelMixin, AugmentationMixin,
 
 
 class InferenceModelExportBaseTask(luigi.Task):
+
+    save_best = luigi.BoolParameter("Save best model weights.", default=False)
+
     def run(self):
         import tensorflow as tf
 
         model = tf.keras.models.load_model(self.input().path, compile=False)
+
+        weights = "weights_best.h5" if self.save_best else "weights_latest.h5"
+
         model.load_weights(os.path.join(self.input().path,
-                                        'weights_latest.h5'))
+                                        weights))
 
         with self.output().temporary_path() as temp_output_path:
             tf.saved_model.save(model,
