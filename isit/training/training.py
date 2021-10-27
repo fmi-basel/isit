@@ -246,7 +246,7 @@ class ModelFittingBaseTask(GPUTask, BuildInstanceModelMixin, AugmentationMixin,
 
 class InferenceModelExportBaseTask(luigi.Task):
 
-    save_best = luigi.BoolParameter("Save best model weights.", default=False)
+    save_best = luigi.BoolParameter(default=False, description="Save best model weights.")
 
     def run(self):
         import tensorflow as tf
