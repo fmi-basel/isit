@@ -19,7 +19,7 @@ class ImageDataset(Dataset):
             img = imread(in_file.decode("utf-8")).astype(np.float32)
             yield (img, out_file)
 
-    def __new__(cls, files, out_shape=(None, None, None), start=0, step=1):
+    def __new__(cls, in_files, out_files, out_shape=(None, None, None), start=0, step=1):
         """
         Create a new Image Dataset which loads images from `files` and
         yields tuple(image, file).
@@ -38,7 +38,7 @@ class ImageDataset(Dataset):
             cls._img_reader,
             output_shapes=(out_shape, ()),
             output_types=(tf.float32, tf.string),
-            args=(files, start, step)
+            args=(in_files, out_files, start, step)
         )
 
 
@@ -59,11 +59,11 @@ class ParallelImageDatasetFactory():
 
     """
 
-    def _create(files, pre_proc_fun=None, num_interleaved_ds=1):
+    def _create(in_files, out_files, pre_proc_fun=None, num_interleaved_ds=1):
         if pre_proc_fun:
             return tf.data.Dataset.range(num_interleaved_ds) \
                 .interleave(
-                lambda i: ImageDataset(files, start=i, step=num_interleaved_ds),
+                lambda i: ImageDataset(in_files, out_files, start=i, step=num_interleaved_ds),
                 num_parallel_calls=tf.data.experimental.AUTOTUNE
             ) \
                 .map(pre_proc_fun) \
@@ -71,10 +71,10 @@ class ParallelImageDatasetFactory():
         else:
             return tf.data.Dataset.range(num_interleaved_ds) \
                 .interleave(
-                lambda i: ImageDataset(files, start=i, step=num_interleaved_ds),
+                lambda i: ImageDataset(in_files, out_files, start=i, step=num_interleaved_ds),
                 num_parallel_calls=tf.data.experimental.AUTOTUNE
             ) \
                 .prefetch(tf.data.experimental.AUTOTUNE)
 
-    def __new__(cls, files, pre_proc_fun=None, num_interleaved_ds=1):
-        return cls._create(files, pre_proc_fun, num_interleaved_ds)
+    def __new__(cls, in_files, out_files, pre_proc_fun=None, num_interleaved_ds=1):
+        return cls._create(in_files, out_files, pre_proc_fun, num_interleaved_ds)

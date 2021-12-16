@@ -10,6 +10,10 @@ from concurrent.futures import ThreadPoolExecutor
 from skimage.io import imread, imsave
 from improc.morphology import clean_up_labels
 
+from isit.dataset.image_dataset import ParallelImageDatasetFactory
+from isit.prediction.apply_model import dynamically_apply_instance_seg_model
+from isit.prediction.postprocessing import get_postprocess_and_save_fun, queue_worker
+from isit.prediction.preprocessing import getfun_match_scaling_and_normalize
 from ..data_collection import ParseCollectionTask, CollectionTarget
 from ..luigi_utils import GPUTask, task_to_hash, monitor_futures
 
@@ -119,13 +123,7 @@ class SegmentInstancesTask(TilingParams, LabelCleaningParams, GPUTask):
         model = tf.saved_model.load(self.model_path)
         lock = threading.Lock()
 
-        df = self.input().load()
-        if self.input_filters is not None:
-            df = df.query(self.input_filters)
-        df.sort_index(inplace=True)
-
-        df_in = df.query('layer=="{}"'.format(self.input_layer))
-        df_out = self.build_output_collection(df)
+        df_in, df_out = self.get_in_out_dataframes()
 
         with ThreadPoolExecutor(max_workers=self.n_threads) as executor:
             futures = []
@@ -142,6 +140,11 @@ class SegmentInstancesTask(TilingParams, LabelCleaningParams, GPUTask):
 
             monitor_futures(futures)
 
+        self.check_output(df_out)
+
+        self.output().save(df_out, self.param_kwargs)
+
+    def check_output(self, df_out):
         # double check that individuals output files have been written
         missing_output_files = [
             p for p in df_out.dc.path if not os.path.isfile(p)
@@ -150,7 +153,14 @@ class SegmentInstancesTask(TilingParams, LabelCleaningParams, GPUTask):
             raise ValueError('Some files were not processed: {}'.format(
                 missing_output_files))
 
-        self.output().save(df_out, self.param_kwargs)
+    def get_in_out_dataframes(self):
+        df = self.input().load()
+        if self.input_filters is not None:
+            df = df.query(self.input_filters)
+        df.sort_index(inplace=True)
+        df_in = df.query('layer=="{}"'.format(self.input_layer))
+        df_out = self.build_output_collection(df)
+        return df_in, df_out
 
 
 class BatchedSegmentInstancesTask(SegmentInstancesTask):
@@ -186,6 +196,79 @@ class BatchedSegmentInstancesTask(SegmentInstancesTask):
                preds.astype(np.uint16),
                compress=9,
                check_contrast=False)
+
+
+@requires(ParseCollectionTask)
+class SegmentInstancesTaskSingleGPU(SegmentInstancesTask):
+
+    # yapf: disable
+    num_post_processes = luigi.IntParameter(default=4, description="Number of processes started to run post-processing and saving of predictions.")
+    # yapf: enable
+
+    def gpu_run(self):
+        logger = logging.getLogger('luigi-interface')
+
+        import tensorflow as tf
+        from multiprocessing import Queue, Process
+
+        model = tf.saved_model.load(self.model_path)
+        model_spacing = model.signatures['get_config']()['spacing'].numpy()
+
+        df_in, df_out = self.get_in_out_dataframes()
+
+        peak_min_distance = model.signatures['get_config']()['peak_min_distance'].numpy()
+        model_fun = model.signatures['model_fun']
+
+        logger.info('Start {} post-processing processes.'.format(self.num_post_processes))
+        out_queue = Queue()
+        post_processors = []
+        for _ in range(self.num_post_processes):
+            postprocess_fun = get_postprocess_and_save_fun(self.labels_fill_holes,
+                                                           self.labels_size_threshold,
+                                                           self.labels_keep_largest,
+                                                           self.labels_sequential,
+                                                           self.image_spacing)
+            t = Process(target=queue_worker,
+                        args=(out_queue,
+                              postprocess_fun))
+            t.start()
+            post_processors.append(t)
+
+        try:
+            scale, fun_preprocessing = getfun_match_scaling_and_normalize(self.image_spacing, model_spacing)
+            def mapped_function(img, file):
+                return tf.py_function(fun_preprocessing, inp=[img, file], Tout=[tf.float32, tf.string, tf.int32])
+
+            logger.info('Create ParallelImageDataset.')
+            ds_pre = ParallelImageDatasetFactory(df_in.dc.path, df_out.dc.path, pre_proc_fun=mapped_function, num_interleaved_ds=1)
+
+            for img, out_file, img_shape in ds_pre:
+                out_queue.put(
+                    dynamically_apply_instance_seg_model(model_fun, img, out_file, img_shape,
+                                                         self.tiling_patch_size, self.tiling_border,
+                                                         peak_min_distance,
+                                                         model_spacing))
+                logger.info('Queued prediction for saving at {}.'.format(out_file))
+
+            self.close_postprocessing(out_queue, post_processors)
+        except Exception as exc:
+            while not out_queue.empty():
+                out_queue.get()
+
+            self.close_postprocessing(out_queue, post_processors)
+
+            raise exc
+
+
+        self.check_output(df_out)
+        self.output().save(df_out, self.param_kwargs)
+
+    def close_postprocessing(self, out_queue, post_processors):
+        for _ in range(self.num_post_processes):
+            out_queue.put(None)
+        for process in post_processors:
+            process.join()
+        out_queue.close()
 
 
 def main():
