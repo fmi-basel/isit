@@ -6,7 +6,7 @@ contrib = [
 
 # setup.
 setup(name='isit',
-      version='0.1.2',
+      version='0.1.3',
       description='2D/3D instance segmentation with iterative training',
       author=', '.join(contrib),
       packages=find_packages(exclude=['tests']),
