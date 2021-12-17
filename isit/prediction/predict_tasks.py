@@ -198,7 +198,6 @@ class BatchedSegmentInstancesTask(SegmentInstancesTask):
                check_contrast=False)
 
 
-@requires(ParseCollectionTask)
 class SegmentInstancesTaskSingleGPU(SegmentInstancesTask):
 
     # yapf: disable
@@ -235,7 +234,7 @@ class SegmentInstancesTaskSingleGPU(SegmentInstancesTask):
             post_processors.append(t)
 
         try:
-            scale, fun_preprocessing = getfun_match_scaling_and_normalize(self.image_spacing, model_spacing)
+            fun_preprocessing = getfun_match_scaling_and_normalize(self.image_spacing, model_spacing)
             def mapped_function(img, file):
                 return tf.py_function(fun_preprocessing, inp=[img, file], Tout=[tf.float32, tf.string, tf.int32])
 
