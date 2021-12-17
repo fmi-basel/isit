@@ -3,7 +3,7 @@ import luigi
 import os
 
 from .training.training import InstanceModelExportTask
-from .prediction.predict_tasks import SegmentInstancesTask, BatchedSegmentInstancesTask, SegmentInstancesTaskSingleGPU
+from .prediction.predict_tasks import SegmentInstancesTask, BatchedSegmentInstancesTask, SegmentInstancesSingleGPUTask
 
 config = luigi.configuration.get_config()
 

@@ -198,7 +198,7 @@ class BatchedSegmentInstancesTask(SegmentInstancesTask):
                check_contrast=False)
 
 
-class SegmentInstancesTaskSingleGPU(SegmentInstancesTask):
+class SegmentInstancesSingleGPUTask(SegmentInstancesTask):
 
     # yapf: disable
     num_post_processes = luigi.IntParameter(default=4, description="Number of processes started to run post-processing and saving of predictions.")
