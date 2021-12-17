@@ -20,8 +20,6 @@ def getfun_match_scaling_and_normalize(src_spacing, dst_spacing):
             The spacing of the model
 
     Returns:
-        scale: float
-            The scale-factors for each dimension based on src_spacing and dst_spacing
         match_scaling_and_normalize: function
             The pre-processing function
     """
@@ -37,4 +35,4 @@ def getfun_match_scaling_and_normalize(src_spacing, dst_spacing):
         img = (img - img.mean())/img.std()
         return img[..., None], file, img_shape
 
-    return scale, match_scaling_and_normalize
+    return match_scaling_and_normalize
