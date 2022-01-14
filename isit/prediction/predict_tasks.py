@@ -239,7 +239,8 @@ class SegmentInstancesSingleGPUTask(SegmentInstancesTask):
                 return tf.py_function(fun_preprocessing, inp=[img, file], Tout=[tf.float32, tf.string, tf.int32])
 
             logger.info('Create ParallelImageDataset.')
-            ds_pre = ParallelImageDatasetFactory(df_in.dc.path, df_out.dc.path, pre_proc_fun=mapped_function, num_interleaved_ds=1)
+            ds_pre = ParallelImageDatasetFactory(df_in.dc.path, df_out.dc.path, out_shape=(None,) * len(model_spacing),
+                                                 pre_proc_fun=mapped_function, num_interleaved_ds=1)
 
             for img, out_file, img_shape in ds_pre:
                 out_queue.put(

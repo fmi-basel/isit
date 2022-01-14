@@ -59,11 +59,11 @@ class ParallelImageDatasetFactory():
 
     """
 
-    def _create(in_files, out_files, pre_proc_fun=None, num_interleaved_ds=1):
+    def _create(in_files, out_files, out_shape=(None, None, None), pre_proc_fun=None, num_interleaved_ds=1):
         if pre_proc_fun:
             return tf.data.Dataset.range(num_interleaved_ds) \
                 .interleave(
-                lambda i: ImageDataset(in_files, out_files, start=i, step=num_interleaved_ds),
+                lambda i: ImageDataset(in_files, out_files, out_shape=out_shape, start=i, step=num_interleaved_ds),
                 num_parallel_calls=tf.data.experimental.AUTOTUNE
             ) \
                 .map(pre_proc_fun) \
@@ -71,10 +71,10 @@ class ParallelImageDatasetFactory():
         else:
             return tf.data.Dataset.range(num_interleaved_ds) \
                 .interleave(
-                lambda i: ImageDataset(in_files, out_files, start=i, step=num_interleaved_ds),
+                lambda i: ImageDataset(in_files, out_files, out_shape=out_shape, start=i, step=num_interleaved_ds),
                 num_parallel_calls=tf.data.experimental.AUTOTUNE
             ) \
                 .prefetch(tf.data.experimental.AUTOTUNE)
 
-    def __new__(cls, in_files, out_files, pre_proc_fun=None, num_interleaved_ds=1):
-        return cls._create(in_files, out_files, pre_proc_fun, num_interleaved_ds)
+    def __new__(cls, in_files, out_files, out_shape, pre_proc_fun=None, num_interleaved_ds=1):
+        return cls._create(in_files, out_files, out_shape, pre_proc_fun, num_interleaved_ds)
