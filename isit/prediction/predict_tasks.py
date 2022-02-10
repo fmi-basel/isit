@@ -25,6 +25,7 @@ class LabelCleaningParams(luigi.Config):
     labels_size_threshold = luigi.IntParameter(None, description="minimum label area in px")
     labels_keep_largest = luigi.BoolParameter(False, description='when true, in case of disjoint regions with the same label, only keeps the largest one', parsing=luigi.BoolParameter.EXPLICIT_PARSING)
     labels_sequential = luigi.BoolParameter(True, description='Rename labels sequentialy', parsing=luigi.BoolParameter.EXPLICIT_PARSING)
+    dilation_radius = luigi.IntParameter(None, description="Label mask dilation radius")
     # yapf: enable
 
 
@@ -104,7 +105,7 @@ class SegmentInstancesTask(TilingParams, LabelCleaningParams, GPUTask):
 
         pred = clean_up_labels(pred,
                                fill_holes=self.labels_fill_holes,
-                               radius=None,
+                               radius=self.dilation_radius,
                                size_threshold=self.labels_size_threshold,
                                keep_largest=self.labels_keep_largest,
                                sequential=self.labels_sequential,
