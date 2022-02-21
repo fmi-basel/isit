@@ -9,7 +9,7 @@ from dlutils.postprocessing.voting import embeddings_to_labels
 from dlutils.layers.semi_conv import generate_coordinate_grid
 from dlutils.preprocessing.normalization import standardize
 
-from monkeypatch import remove_shm_from_resource_tracker
+from .monkeypatch import remove_shm_from_resource_tracker
 from ..luigi_utils import thread_lock_wrapper
 from .tiling import TileGenerator
 

@@ -9,7 +9,7 @@ from improc.morphology import clean_up_labels
 
 from skimage.io import imsave
 
-from monkeypatch import remove_shm_from_resource_tracker
+from .monkeypatch import remove_shm_from_resource_tracker
 
 
 def queue_worker(queue, fun):
