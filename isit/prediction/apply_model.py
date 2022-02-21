@@ -9,6 +9,7 @@ from dlutils.postprocessing.voting import embeddings_to_labels
 from dlutils.layers.semi_conv import generate_coordinate_grid
 from dlutils.preprocessing.normalization import standardize
 
+from .monkeypatch import remove_shm_from_resource_tracker
 from ..luigi_utils import thread_lock_wrapper
 from .tiling import TileGenerator
 
@@ -54,6 +55,7 @@ def dynamically_apply_instance_seg_model(model_fun,
         img_shape: tuple
             The original image shape
     """
+    remove_shm_from_resource_tracker()
     if patch_size is None or all([s <= p for s, p in zip(img.shape, patch_size)]):
         prediction = model_fun(img[None])
         embeddings = prediction['embeddings'][0]
