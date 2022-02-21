@@ -1,4 +1,5 @@
 import os
+from multiprocessing.shared_memory import SharedMemory
 
 import numpy as np
 from skimage.transform import resize
@@ -40,12 +41,19 @@ def get_postprocess_and_save_fun(labels_fill_holes, labels_size_threshold,
                                  labels_keep_largest, labels_sequential,
                                  image_spacing):
     def post_process_and_save(element):
-        labeling, outpath, img_shape = element
+        shm_name, shape, dtype, outpath, img_shape = element
+
+        shm = SharedMemory(shm_name)
+        labeling = np.ndarray(shape, dtype=dtype, buffer=shm.buf)
+
         labeling = postprocess(labeling, img_shape, labels_fill_holes,
                                labels_size_threshold, labels_keep_largest,
                                labels_sequential, image_spacing)
 
         os.makedirs(os.path.dirname(outpath), exist_ok=True)
         imsave(outpath, labeling.astype(np.uint16), compress=9, check_contrast=False)
+
+        shm.close()
+        shm.unlink()
 
     return post_process_and_save

@@ -12,6 +12,8 @@ from dlutils.preprocessing.normalization import standardize
 from ..luigi_utils import thread_lock_wrapper
 from .tiling import TileGenerator
 
+from multiprocessing.shared_memory import SharedMemory
+
 
 def dynamically_apply_instance_seg_model(model_fun,
                                          img,
@@ -63,9 +65,9 @@ def dynamically_apply_instance_seg_model(model_fun,
                                       spacing=model_spacing,
                                       min_count=2)
 
-        labels = tf.cast(labels, tf.uint16)
+        labels = tf.cast(labels, tf.uint16).cpu().numpy()
 
-        return tuple([labels.cpu().numpy(), out_file.numpy().decode("utf-8"), img_shape.numpy()])
+        return allocate_shared_memory(img_shape, labels, out_file)
     else:
         tile_generator = TileGenerator(tuple(img.shape),
                                        patch_size=patch_size,
@@ -102,7 +104,18 @@ def dynamically_apply_instance_seg_model(model_fun,
                                           spacing=model_spacing,
                                           min_count=2)
 
-        return tuple([labels.numpy(), out_file.numpy().decode("utf-8"), img_shape.numpy()])
+        labels = tf.cast(labels, tf.uint16).cpu().numpy()
+
+        return allocate_shared_memory(img_shape, labels, out_file)
+
+
+def allocate_shared_memory(img_shape, labels, out_file):
+    shm = SharedMemory(create=True, size=labels.nbytes)
+    shm_labels = np.ndarray(labels.shape, dtype=labels.dtype, buffer=shm.buf)
+    shm_labels[:] = labels[:]
+    result = tuple([shm.name, labels.shape, labels.dtype, out_file.numpy().decode("utf-8"), img_shape.numpy()])
+    shm.close()
+    return result
 
 
 def apply_instance_seg_model(inference_model, img, img_spacing, lock=None):
