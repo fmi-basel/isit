@@ -16,6 +16,15 @@ from .tiling import TileGenerator
 from multiprocessing.shared_memory import SharedMemory
 
 
+def allocate_shared_memory(img_shape, labels, out_file):
+    shm = SharedMemory(create=True, size=labels.nbytes)
+    shm_labels = np.ndarray(labels.shape, dtype=labels.dtype, buffer=shm.buf)
+    shm_labels[:] = labels[:]
+    result = tuple([shm.name, labels.shape, labels.dtype, out_file.numpy().decode("utf-8"), img_shape.numpy()])
+    shm.close()
+    return result
+
+
 def dynamically_apply_instance_seg_model(model_fun,
                                          img,
                                          out_file,
@@ -109,15 +118,6 @@ def dynamically_apply_instance_seg_model(model_fun,
         labels = tf.cast(labels, tf.uint16).cpu().numpy()
 
         return allocate_shared_memory(img_shape, labels, out_file)
-
-
-def allocate_shared_memory(img_shape, labels, out_file):
-    shm = SharedMemory(create=True, size=labels.nbytes)
-    shm_labels = np.ndarray(labels.shape, dtype=labels.dtype, buffer=shm.buf)
-    shm_labels[:] = labels[:]
-    result = tuple([shm.name, labels.shape, labels.dtype, out_file.numpy().decode("utf-8"), img_shape.numpy()])
-    shm.close()
-    return result
 
 
 def apply_instance_seg_model(inference_model, img, img_spacing, lock=None):
