@@ -64,7 +64,6 @@ def dynamically_apply_instance_seg_model(model_fun,
         img_shape: tuple
             The original image shape
     """
-    remove_shm_from_resource_tracker()
     if patch_size is None or all([s <= p for s, p in zip(img.shape, patch_size)]):
         prediction = model_fun(img[None])
         embeddings = prediction['embeddings'][0]

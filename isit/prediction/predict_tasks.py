@@ -12,6 +12,7 @@ from improc.morphology import clean_up_labels
 
 from isit.dataset.image_dataset import ParallelImageDatasetFactory
 from isit.prediction.apply_model import dynamically_apply_instance_seg_model
+from isit.prediction.monkeypatch import remove_shm_from_resource_tracker
 from isit.prediction.postprocessing import get_postprocess_and_save_fun, queue_worker
 from isit.prediction.preprocessing import getfun_match_scaling_and_normalize
 from ..data_collection import ParseCollectionTask, CollectionTarget
@@ -206,6 +207,7 @@ class SegmentInstancesSingleGPUTask(SegmentInstancesTask):
     # yapf: enable
 
     def gpu_run(self):
+        remove_shm_from_resource_tracker()
         logger = logging.getLogger('luigi-interface')
 
         import tensorflow as tf

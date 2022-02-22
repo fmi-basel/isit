@@ -13,6 +13,7 @@ from .monkeypatch import remove_shm_from_resource_tracker
 
 
 def queue_worker(queue, fun):
+    remove_shm_from_resource_tracker()
     element = queue.get()
     while not element is None:
         fun(element)
@@ -43,7 +44,6 @@ def get_postprocess_and_save_fun(labels_fill_holes, labels_size_threshold,
                                  labels_keep_largest, labels_sequential,
                                  image_spacing):
     def post_process_and_save(element):
-        remove_shm_from_resource_tracker()
         shm_name, shape, dtype, outpath, img_shape = element
 
         shm = SharedMemory(shm_name)
