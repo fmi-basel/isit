@@ -21,7 +21,7 @@ def allocate_shared_memory(img_shape, labels, out_file):
     shm = SharedMemory(create=True, size=np.product(labels.shape) * dtype.nbytes)
     shm_labels = np.ndarray(labels.shape, dtype=dtype.dtype, buffer=shm.buf)
     shm_labels[:] = labels
-    result = tuple([shm.name, labels.shape, labels.dtype, out_file.numpy().decode("utf-8"), img_shape.numpy()])
+    result = tuple([shm.name, labels.shape, dtype.dtype, out_file.numpy().decode("utf-8"), img_shape.numpy()])
     shm.close()
     return result
 
