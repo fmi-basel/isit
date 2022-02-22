@@ -17,9 +17,10 @@ from multiprocessing.shared_memory import SharedMemory
 
 
 def allocate_shared_memory(img_shape, labels, out_file):
-    shm = SharedMemory(create=True, size=labels.nbytes)
-    shm_labels = np.ndarray(labels.shape, dtype=labels.dtype, buffer=shm.buf)
-    shm_labels[:] = labels[:]
+    dtype = labels.dtype.as_numpy_dtype()
+    shm = SharedMemory(create=True, size=np.product(labels.shape) * dtype.nbytes)
+    shm_labels = np.ndarray(labels.shape, dtype=labels.dtype.as_numpy_dtype(), buffer=shm.buf)
+    shm_labels[:] = labels
     result = tuple([shm.name, labels.shape, labels.dtype, out_file.numpy().decode("utf-8"), img_shape.numpy()])
     shm.close()
     return result
@@ -75,7 +76,7 @@ def dynamically_apply_instance_seg_model(model_fun,
                                       spacing=model_spacing,
                                       min_count=2)
 
-        labels = tf.cast(labels, tf.uint16).cpu().numpy()
+        labels = tf.cast(labels, tf.uint16)
 
         return allocate_shared_memory(img_shape, labels, out_file)
     else:
@@ -114,7 +115,7 @@ def dynamically_apply_instance_seg_model(model_fun,
                                           spacing=model_spacing,
                                           min_count=2)
 
-        labels = tf.cast(labels, tf.uint16).cpu().numpy()
+        labels = tf.cast(labels, tf.uint16)
 
         return allocate_shared_memory(img_shape, labels, out_file)
 
