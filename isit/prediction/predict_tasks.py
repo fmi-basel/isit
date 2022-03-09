@@ -253,7 +253,9 @@ class SegmentInstancesSingleGPUTask(SegmentInstancesTask):
                 logger.info('Queued prediction for saving at {}.'.format(out_file))
 
             self.close_postprocessing(out_queue, post_processors)
-        except Exception as exc:
+        # KeyboardInterrupt inherits from BaseException and so catching for Exception only will not
+        # run the following piece of code to cleanup
+        except (Exception, KeyboardInterrupt) as exc:
             logger.error('Got exception: %s' % str(exc))
             logger.error('%s' % format_exc())
             logger.error('Flushing the queue')
