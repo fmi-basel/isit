@@ -6,6 +6,7 @@ import threading
 from luigi.util import requires
 import multiprocessing
 from concurrent.futures import ThreadPoolExecutor
+from traceback import format_exc
 
 from skimage.io import imread, imsave
 from improc.morphology import clean_up_labels
@@ -253,6 +254,9 @@ class SegmentInstancesSingleGPUTask(SegmentInstancesTask):
 
             self.close_postprocessing(out_queue, post_processors)
         except Exception as exc:
+            logger.error('Got exception: %s' % str(exc))
+            logger.error('%s' % format_exc())
+            logger.error('Flushing the queue')
             while not out_queue.empty():
                 out_queue.get()
 
@@ -265,10 +269,14 @@ class SegmentInstancesSingleGPUTask(SegmentInstancesTask):
         self.output().save(df_out, self.param_kwargs)
 
     def close_postprocessing(self, out_queue, post_processors):
+        logger = logging.getLogger('luigi-interface')
+        logger.info('Closing processing, sending termination item to the queue')
         for _ in range(self.num_post_processes):
             out_queue.put(None)
+        logger.info('Waiting for children processes to terminate')
         for process in post_processors:
             process.join()
+        logger.info('Closing the queue')
         out_queue.close()
 
 
