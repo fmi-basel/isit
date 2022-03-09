@@ -252,7 +252,6 @@ class SegmentInstancesSingleGPUTask(SegmentInstancesTask):
                                                          model_spacing))
                 logger.info('Queued prediction for saving at {}.'.format(out_file))
 
-            self.close_postprocessing(out_queue, post_processors)
         # KeyboardInterrupt inherits from BaseException and so catching for Exception only will not
         # run the following piece of code to cleanup
         except (Exception, KeyboardInterrupt) as exc:
@@ -266,7 +265,7 @@ class SegmentInstancesSingleGPUTask(SegmentInstancesTask):
 
             raise exc
 
-
+        self.close_postprocessing(out_queue, post_processors)
         self.check_output(df_out)
         self.output().save(df_out, self.param_kwargs)
 
