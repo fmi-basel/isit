@@ -262,7 +262,7 @@ class SegmentInstancesSingleGPUTask(SegmentInstancesTask):
             while not out_queue.empty():
                 out_queue.get()
 
-            self.close_postprocessing(out_queue, post_processors)
+            self.close_postprocessing(out_queue, post_processors, True)
 
             raise exc
 
