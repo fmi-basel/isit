@@ -212,6 +212,7 @@ class SegmentInstancesSingleGPUTask(SegmentInstancesTask):
 
         import tensorflow as tf
         from multiprocessing import Queue, Process
+        from queue import Empty
 
         model = tf.saved_model.load(self.model_path)
         model_spacing = model.signatures['get_config']()['spacing'].numpy()
@@ -260,7 +261,10 @@ class SegmentInstancesSingleGPUTask(SegmentInstancesTask):
             logger.error('%s' % format_exc())
             logger.error('Flushing the queue')
             while not out_queue.empty():
-                out_queue.get()
+                try:
+                    out_queue.get(False)
+                except Empty:
+                    break
 
             self.close_postprocessing(out_queue, post_processors, True)
 
