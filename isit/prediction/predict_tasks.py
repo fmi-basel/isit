@@ -2,6 +2,7 @@ import luigi
 import logging
 import numpy as np
 import os
+import signal
 import threading
 from luigi.util import requires
 import multiprocessing
@@ -269,14 +270,30 @@ class SegmentInstancesSingleGPUTask(SegmentInstancesTask):
         self.check_output(df_out)
         self.output().save(df_out, self.param_kwargs)
 
-    def close_postprocessing(self, out_queue, post_processors):
+    def close_postprocessing(self, out_queue, post_processors, force = False):
+        join_timeout = None
+        if force:
+            # some libraries (e.g. TF) can be super slow to terminate, let's be generous
+            join_timeout = 5
+            # we might need to kill some worker processes if they are stuck
+            # if they can't get their item from the out_queue the queue will fail to properly close
+            # as by default Queues will wait until the entire buffer is flushed before actually
+            # closing when garbage collected. This can be prevented with cancel_join_thread()
+            out_queue.cancel_join_thread()
         logger = logging.getLogger('luigi-interface')
         logger.info('Closing processing, sending termination item to the queue')
         for _ in range(self.num_post_processes):
             out_queue.put(None)
         logger.info('Waiting for children processes to terminate')
         for process in post_processors:
-            process.join()
+            process.join(join_timeout)
+        # check if any process is still alive and force the termination if so
+        if force:
+            logger.info('Checking for stuck worker processes')
+            for process in post_processors:
+                if process.is_alive():
+                    logger.info('worker process %d not terminating after timeout, sending SIGKILL' % process.pid)
+                    os.kill(process.pid, signal.SIGKILL)
         logger.info('Closing the queue')
         out_queue.close()
 
