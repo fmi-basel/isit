@@ -17,7 +17,7 @@ def queue_worker(queue, fun):
 
 
 def postprocess(labeling, img_shape, labels_fill_holes, labels_size_threshold, labels_keep_largest,
-                labels_sequential, image_spacing):
+                labels_sequential, image_spacing, num_processes = None):
     smooth_sigma = np.max(np.array(img_shape) / np.array(labeling.shape)) * np.sqrt(2)
     labeling = resize(labeling.astype(np.float32),
                       output_shape=img_shape,
@@ -32,7 +32,8 @@ def postprocess(labeling, img_shape, labels_fill_holes, labels_size_threshold, l
                                size_threshold=labels_size_threshold,
                                keep_largest=labels_keep_largest,
                                sequential=labels_sequential,
-                               spacing=image_spacing)
+                               spacing=image_spacing,
+                               processes=num_processes)
     return labeling
 
 
