@@ -41,8 +41,14 @@ def segment_ROI(img, model_fun, tiling_patch_size, tiling_border, peak_min_dista
 			num_post_processes)
 	return labels
 
-def isit_segmentation(io_image_paths, model_path, labels_fill_holes, labels_size_threshold, labels_keep_largest, labels_sequential, image_spacing, tiling_patch_size, tiling_border, num_post_processes = 4):
+def isit_segmentation(io_image_paths, model_path, labels_fill_holes, labels_size_threshold, labels_keep_largest, labels_sequential, image_spacing, tiling_patch_size, tiling_border, core_count = 4):
 	logger = logging.getLogger('luigi-interface')
+	
+	# the following will limit the amount of CPU cores TensorFlow will use for CPU tasks.
+	# there is one CPU only task at the end of the dynamically_apply_instance_seg_model() function
+	# see also https://stackoverflow.com/questions/57925061/how-can-i-reduce-the-number-of-cpus-used-by-tensorlfow-keras
+	tf.config.threading.set_intra_op_parallelism_threads(core_count)
+	tf.config.threading.set_inter_op_parallelism_threads(core_count)
 	
 	model = tf.saved_model.load(model_path)
 	model_spacing = model.signatures['get_config']()['spacing'].numpy()
@@ -56,7 +62,7 @@ def isit_segmentation(io_image_paths, model_path, labels_fill_holes, labels_size
 	for input_image, out_file in io_image_paths:
 		logger.info('Loading and processing image: %s' % input_image)
 		img = load_image(input_image)
-		labels = segment_ROI(img, model_fun, tiling_patch_size, tiling_border, peak_min_distance, model_spacing, labels_fill_holes, labels_size_threshold, labels_keep_largest, labels_sequential, image_spacing, num_post_processes)
+		labels = segment_ROI(img, model_fun, tiling_patch_size, tiling_border, peak_min_distance, model_spacing, labels_fill_holes, labels_size_threshold, labels_keep_largest, labels_sequential, image_spacing, core_count)
 		logger.info('Saving labels to: %s' % out_file)
 		save_image(out_file, labels)
 	return
@@ -87,4 +93,4 @@ if __name__ == '__main__':
 		filename, ext = os.path.splitext(image_path)
 		output_image_paths.append('%s%s%s' % (filename.replace('TIF-OVR', 'NUC_SEG3D'), '_enrico', ext))
 	
-	isit_segmentation(zip(input_image_paths, output_image_paths), model_path, labels_fill_holes, labels_size_threshold, labels_keep_largest, labels_sequential, image_spacing, tiling_patch_size, tiling_border, 1)
+	isit_segmentation(zip(input_image_paths, output_image_paths), model_path, labels_fill_holes, labels_size_threshold, labels_keep_largest, labels_sequential, image_spacing, tiling_patch_size, tiling_border, 4)
