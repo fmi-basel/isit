@@ -1,0 +1,6 @@
+{
+    "parallelization_level": "image",
+    "cpus_per_task": 4,
+    "mem": 16000,
+    "needs_gpu": true
+}
