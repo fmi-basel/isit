@@ -91,7 +91,7 @@
     "tiling_border": {
       "title": "Tiling Border",
       "default": [
-        5,
+        25,
         50,
         50,
         0
