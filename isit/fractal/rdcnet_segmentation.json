@@ -70,7 +70,7 @@
     },
     "core_count": {
       "title": "Core Count",
-      "default": 4,
+      "default": 40,
       "type": "integer",
       "description": "How many CPU cores to use"
     },

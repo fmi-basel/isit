@@ -104,7 +104,7 @@ def rdcnet_segmentation(
     relabeling: bool = True,
     # RDCNet-related arguments
 	model_path: str,
-    core_count: int = 4,
+    core_count: int = 40,
     tiling_patch_size: list[int] = [100, 400, 400, 1],
     tiling_border: list[int] = [25, 50, 50, 0],
     labels_fill_holes: bool = True, 
@@ -332,6 +332,10 @@ def rdcnet_segmentation(
         f"and chunks {data_zyx.chunks}"
     )
 
+    # this must be set before initializing the network or it will throw a RuntimeError
+    tf.config.threading.set_intra_op_parallelism_threads(core_count)
+    tf.config.threading.set_inter_op_parallelism_threads(core_count)
+
     # Initialize RDCNet
     model = tf.saved_model.load(model_path)
     model_spacing = model.signatures['get_config']()['spacing'].numpy()
@@ -342,9 +346,6 @@ def rdcnet_segmentation(
         tuple(actual_res_pxl_sizes_zyx), 
         model_spacing
     )
-    #tf.config.threading.set_intra_op_parallelism_threads(core_count)
-    #tf.config.threading.set_inter_op_parallelism_threads(core_count)
-
     # Counters for relabeling
     if relabeling:
         num_labels_tot = 0
