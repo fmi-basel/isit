@@ -1,3 +1,12 @@
+# Copyright 2024 (C) Friedrich Miescher Institute for Biomedical Research
+#
+# Original authors:
+# Tommaso Comparin <tommaso.comparin@exact-lab.it>
+# Marco Franzon <marco.franzon@exact-lab.it>
+# Joel Lüthi  <joel.luethi@fmi.ch>
+# Franziska Moos <franziska.moos@fmi.ch>
+# Enrico Tagliavini <enrico.tagliavini@fmi.ch>
+
 import logging
 import numpy as np
 import os
