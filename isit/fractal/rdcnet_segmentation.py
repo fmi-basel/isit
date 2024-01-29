@@ -20,6 +20,9 @@ import numpy as np
 import pandas as pd
 import zarr
 from anndata._io.specs import write_elem
+from dlutils.models import load_model as dlutils_load_model
+from isit.prediction.apply_model import apply_instance_seg_model, tiled_apply_instance_seg_model
+from scipy.ndimage import find_objects
 
 import fractal_tasks_core
 from fractal_tasks_core.lib_channels import ChannelNotFoundError
@@ -51,19 +54,30 @@ from isit.prediction.preprocessing import getfun_match_scaling_and_normalize
 logger = logging.getLogger(__name__)
 __OME_NGFF_VERSION__ = fractal_tasks_core.__OME_NGFF_VERSION__
 
-def segment_ROI(img, model_fun, tiling_patch_size, tiling_border, peak_min_distance, model_spacing, labels_fill_holes, labels_size_threshold, labels_keep_largest, labels_sequential, image_spacing, num_post_processes):
-    """
-    Applies RDCNet segmenation to img
 
-    img needs to be 4D to work with the wrapper task, but RDCNet internally 
-    wants a 3D array. Thus, 
+def do_mip(
+	image: np.ndarray
+):
     """
-    logger.info("[segment_ROI] Starting preprocessing")
+    Generates MIP from 3D image.
+    """
+	img_max= np.max(image, axis=0)
+
+	return img_max
+
+def segment_ROI_3D(img, model_fun, tiling_patch_size, tiling_border, peak_min_distance, model_spacing, labels_fill_holes, labels_size_threshold, labels_keep_largest, labels_sequential, image_spacing, num_post_processes):
+    """
+    Applies 3D RDCNet segmenation to img
+
+    img needs to be 4D to work with the wrapper task, but RDCNet internally
+    wants a 3D array.
+    """
+    logger.info("[segment_ROI_3D] Starting preprocessing")
     img = np.squeeze(img)
     img, _, img_shape = preprocessing_fun(img, '', False)
     img_shape = tf.convert_to_tensor(img_shape)
     img = tf.convert_to_tensor(img, dtype=tf.float32)
-    logger.info("[segment_ROI] Starting segmentation")
+    logger.info("[segment_ROI_3D] Starting segmentation")
     labels, _, _ = dynamically_apply_instance_seg_model(
 			model_fun,
 			img,
@@ -72,7 +86,7 @@ def segment_ROI(img, model_fun, tiling_patch_size, tiling_border, peak_min_dista
 			tiling_patch_size, tiling_border,
 			peak_min_distance,
 			model_spacing)
-    logger.info("[segment_ROI] Segmentation done, starting postprocessing")
+    logger.info("[segment_ROI_3D] Segmentation done, starting postprocessing")
     labels = postprocess(
 			labels,
 			img_shape,
@@ -82,8 +96,61 @@ def segment_ROI(img, model_fun, tiling_patch_size, tiling_border, peak_min_dista
 			labels_sequential,
 			image_spacing,
 			num_post_processes)
-    logger.info("[segment_ROI] Postprocessing Done")
+    logger.info("[segment_ROI_3D] Postprocessing Done")
     return labels
+
+def init_segmentation_3D(model_path):
+	# the following will limit the amount of CPU cores TensorFlow will use for CPU tasks.
+	# there is one CPU only task at the end of the dynamically_apply_instance_seg_model() function
+	# see also https://stackoverflow.com/questions/57925061/how-can-i-reduce-the-number-of-cpus-used-by-tensorlfow-keras
+	tf.config.threading.set_intra_op_parallelism_threads(core_count)
+	tf.config.threading.set_inter_op_parallelism_threads(core_count)
+
+	model = tf.saved_model.load(model_path)
+	model_spacing = model.signatures['get_config']()['spacing'].numpy()
+
+	peak_min_distance = model.signatures['get_config']()['peak_min_distance'].numpy()
+	model_fun = model.signatures['model_fun']
+
+	global preprocessing_fun
+	preprocessing_fun = getfun_match_scaling_and_normalize(image_spacing, model_spacing)
+
+	return model_spacing, model_fun, peak_min_distance
+
+def segment_ROI_2D(img, model, image_spacing, patch_size):
+    """
+    Applies 2D RDCNet segmenation to img
+
+    """
+	#img = img[0]
+	if len(img.shape) != 2:
+		raise ValueError('Input image must be exactly 2D')
+	pred = tiled_apply_instance_seg_model(
+		model, img, image_spacing,
+		patch_size = patch_size,
+		border = (300, 300, 0), #Hard coded values found in drogon
+		gpu_postproc = False, #in the original drogon code the variable was hard (eye emoji) coded to False
+		lock = None
+	)
+	locs = find_objects(pred)
+	locs = [
+		tuple(slice(max(0, s.start - 1), s.stop + 1)
+			for s in loc) if loc else None for loc in locs
+	]
+	label_image = np.zeros_like(pred)
+	for l, loc in enumerate(locs, start=1):
+		mask = pred[loc] == l
+		if loc:
+			label_image[loc][mask] = l
+
+	return label_image
+
+def init_segmentation_2D(model_path, core_count):
+	tf.config.threading.set_intra_op_parallelism_threads(core_count)
+	tf.config.threading.set_inter_op_parallelism_threads(core_count)
+
+	model = dlutils_load_model(model_path)
+	return model
 
 
 @validate_arguments
@@ -103,14 +170,17 @@ def rdcnet_segmentation(
     use_masks: bool = True,
     relabeling: bool = True,
     # RDCNet-related arguments
-	model_path: str,
+    do_2D: bool = True,
+	model_path: str = "bla", #fix me later
     core_count: int = 40,
     tiling_patch_size: list[int] = [100, 400, 400, 1],
     tiling_border: list[int] = [25, 50, 50, 0],
-    labels_fill_holes: bool = True, 
-    labels_size_threshold: int = 0, 
-    labels_keep_largest: bool = True, 
+    labels_fill_holes: bool = True,
+    labels_size_threshold: int = 0,
+    labels_keep_largest: bool = True,
     labels_sequential: bool = True,
+    # 2D RDCNet-related arguments
+    patch_size: tuple[int] = [1300, 1300, 1],
     overwrite: bool = True,
 ) -> Dict[str, Any]:
     """
@@ -148,18 +218,21 @@ def rdcnet_segmentation(
         output_label_name: Name of the output label image (e.g. `"organoids"`).
         relabeling: If `True`, apply relabeling so that label values are
             unique for all objects in the well.
+        do_2D: If `True`, 2D MIP based segmentation will be excuted, otherwise
+            the 3D segmentation.
         model_path: Full path to the trained RDCNet model
         core_count: How many CPU cores to use
         tiling_patch_size: Size of tiling patches to process in pixels (zyx?)
         tiling_border: Overlap between patches to use (we think)
         labels_fill_holes: Whether wholes in label masks should be filled
         labels_size_threshold: RDCNET parameter, always set to True?
-        labels_keep_largest: RDCNET parameter, something about overlapping 
+        labels_keep_largest: RDCNET parameter, something about overlapping
             labels?
         labels_sequential: Enforcment of sequential labeling?
+        patch_size: Size of the patch, excluding border, see RDCNet documentation.
         overwrite: If `True`, overwrite the task output.
     """
-    # Handle tiling_patch_size constraints better: Wait for 
+    # Handle tiling_patch_size constraints better: Wait for
     # https://github.com/fractal-analytics-platform/fractal-tasks-core/issues/564
     tiling_patch_size = tuple(tiling_patch_size)
     tiling_border = tuple(tiling_border)
@@ -332,20 +405,6 @@ def rdcnet_segmentation(
         f"and chunks {data_zyx.chunks}"
     )
 
-    # this must be set before initializing the network or it will throw a RuntimeError
-    tf.config.threading.set_intra_op_parallelism_threads(core_count)
-    tf.config.threading.set_inter_op_parallelism_threads(core_count)
-
-    # Initialize RDCNet
-    model = tf.saved_model.load(model_path)
-    model_spacing = model.signatures['get_config']()['spacing'].numpy()
-    peak_min_distance = model.signatures['get_config']()['peak_min_distance'].numpy()
-    model_fun = model.signatures['model_fun']
-    global preprocessing_fun
-    preprocessing_fun = getfun_match_scaling_and_normalize(
-        tuple(actual_res_pxl_sizes_zyx), 
-        model_spacing
-    )
     # Counters for relabeling
     if relabeling:
         num_labels_tot = 0
@@ -355,6 +414,68 @@ def rdcnet_segmentation(
 
     if output_ROI_table:
         bbox_dataframe_list = []
+
+    def _do_seg2d(model):
+        # Prepare keyword arguments for segment_ROI_2D fucntion
+        cc = dict(
+            model = model,
+            image_spacing = tuple(actual_res_pxl_sizes_zyx[1:]),
+            patch_size = patch_size
+        )
+        # Call segment_ROI through the masked-loading wrapper, which includes
+        # pre/post-processing functions if needed
+
+        label_img_2D = masked_loading_wrapper(
+            image_array=do_mip(img_np[0]),
+            function=segment_ROI_2D,
+            kwargs=kwargs_segment_ROI_2D,
+            use_masks=use_masks,
+            preprocessing_kwargs=preprocessing_kwargs,
+        )
+
+        # Fillup a 3D Volume to be compatible with saving roi later
+        new_label_img = np.zeros(img_np[0].shape)
+        new_label_img[:,] = label_img_2D
+        return new_label_img
+
+    def _do_seg3d(model_spacing, model_fun, peak_min_distance):
+        # Prepare keyword arguments for segment_ROI_3D function
+        kwargs_segment_ROI_3D = dict(
+            model_fun = model_fun,
+            tiling_patch_size = tiling_patch_size,
+            tiling_border = tiling_border,
+            peak_min_distance = peak_min_distance,
+            model_spacing = model_spacing,
+            labels_fill_holes = labels_fill_holes,
+            labels_size_threshold = labels_size_threshold,
+            labels_keep_largest = labels_keep_largest,
+            labels_sequential = labels_sequential,
+            image_spacing = tuple(actual_res_pxl_sizes_zyx),
+            num_post_processes = core_count
+        )
+
+        # Call segment_ROI through the masked-loading wrapper, which includes
+        # pre/post-processing functions if needed
+        new_label_img = masked_loading_wrapper(
+            image_array=img_np,
+            function=segment_ROI_3D,
+            kwargs=kwargs_segment_ROI_3D,
+            use_masks=use_masks,
+            preprocessing_kwargs=preprocessing_kwargs,
+        )
+        return new_label_img
+
+    # Initializing models
+    if do_2D:
+        # Initialize the 2D model
+        model = init_segmentation_2D(model_path, core_count)
+        seg_fun = _do_seg2d
+        seg_fun_kwarg = {"model": model}
+    else:
+        # Initialize the 3D model
+        model_spacing, model_fun, peak_min_distance = init_segmentation_3D(model_path)
+        seg_fun = _do_seg3d
+        seg_fun_kwarg = {"model_spacing": model_spacing, "model_fun": model_fun, "peak_min_distance": peak_min_distance}
 
     logger.info(f"Now starting loop over {num_ROIs} ROIs")
     for i_ROI, indices in enumerate(list_indices):
@@ -373,20 +494,6 @@ def rdcnet_segmentation(
             axis=0,
         )
 
-        # Prepare keyword arguments for segment_ROI function
-        kwargs_segment_ROI = dict(
-            model_fun = model_fun, 
-            tiling_patch_size = tiling_patch_size, 
-            tiling_border = tiling_border, 
-            peak_min_distance = peak_min_distance, 
-            model_spacing = model_spacing, 
-            labels_fill_holes = labels_fill_holes, 
-            labels_size_threshold = labels_size_threshold, 
-            labels_keep_largest = labels_keep_largest, 
-            labels_sequential = labels_sequential, 
-            image_spacing = tuple(actual_res_pxl_sizes_zyx), 
-            num_post_processes = core_count
-		)
         # Prepare keyword arguments for preprocessing function
         preprocessing_kwargs = {}
         if use_masks:
@@ -396,16 +503,8 @@ def rdcnet_segmentation(
                 ROI_table_path=ROI_table_path,
                 ROI_positional_index=i_ROI,
             )
+        new_label_img = seg_fun(**seg_fun_kwarg)
 
-        # Call segment_ROI through the masked-loading wrapper, which includes
-        # pre/post-processing functions if needed
-        new_label_img = masked_loading_wrapper(
-            image_array=img_np,
-            function=segment_ROI,
-            kwargs=kwargs_segment_ROI,
-            use_masks=use_masks,
-            preprocessing_kwargs=preprocessing_kwargs,
-        )
         logger.info(f"Finished segmentation for ROI {i_ROI+1}/{num_ROIs}")
 
         # Shift labels and update relabeling counters
@@ -428,6 +527,7 @@ def rdcnet_segmentation(
                     f"but dtype={label_dtype}"
                 )
             logger.info(f"Finished relabeling for ROI {i_ROI+1}")
+
         if output_ROI_table:
             logger.info(f"Starting ROI table processing for ROI {i_ROI+1}")
             bbox_df = array_to_bounding_box_table(
