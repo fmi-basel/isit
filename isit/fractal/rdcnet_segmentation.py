@@ -14,8 +14,6 @@ import tensorflow as tf
 
 from traceback import format_exc
 
-from pydantic.decorator import validate_arguments
-
 import json
 from pathlib import Path
 from typing import Any
@@ -29,36 +27,37 @@ import numpy as np
 import pandas as pd
 import zarr
 from anndata._io.specs import write_elem
-from dlutils.models import load_model as dlutils_load_model
-from isit.prediction.apply_model import apply_instance_seg_model, tiled_apply_instance_seg_model
-from scipy.ndimage import find_objects
 
 import fractal_tasks_core
-from fractal_tasks_core.lib_channels import ChannelNotFoundError
-from fractal_tasks_core.lib_channels import get_channel_from_image_zarr
-from fractal_tasks_core.lib_channels import OmeroChannel
-from fractal_tasks_core.lib_input_models import Channel
-from fractal_tasks_core.lib_ngff import load_NgffImageMeta
-from fractal_tasks_core.lib_masked_loading import masked_loading_wrapper
-from fractal_tasks_core.lib_pyramid_creation import build_pyramid
-from fractal_tasks_core.lib_regions_of_interest import (
+from fractal_tasks_core.channels import (
+    ChannelInputModel,
+    ChannelNotFoundError,
+    get_channel_from_image_zarr,
+    OmeroChannel,
+)
+from fractal_tasks_core.ngff.zarr_utils import load_NgffImageMeta
+from fractal_tasks_core.masked_loading import masked_loading_wrapper
+from fractal_tasks_core.pyramids import build_pyramid
+from fractal_tasks_core.roi import (
     array_to_bounding_box_table,
-)
-from fractal_tasks_core.lib_regions_of_interest import (
+    check_valid_ROI_indices,
     convert_ROI_table_to_indices,
+    find_overlaps_in_ROI_indices,
+    get_overlapping_pairs_3D,
+    is_ROI_table_valid,
+    load_region,
 )
-from fractal_tasks_core.lib_regions_of_interest import check_valid_ROI_indices
-from fractal_tasks_core.lib_regions_of_interest import is_ROI_table_valid
-from fractal_tasks_core.lib_regions_of_interest import load_region
-from fractal_tasks_core.lib_ROI_overlaps import find_overlaps_in_ROI_indices
-from fractal_tasks_core.lib_ROI_overlaps import get_overlapping_pairs_3D
-from fractal_tasks_core.lib_write import prepare_label_group
-from fractal_tasks_core.lib_write import write_table
-from fractal_tasks_core.lib_zattrs_utils import rescale_datasets
+from fractal_tasks_core.labels import prepare_label_group
+from fractal_tasks_core.tables import write_table
+from fractal_tasks_core.utils import rescale_datasets
 
+from dlutils.models import load_model as dlutils_load_model
 from isit.prediction.apply_model import dynamically_apply_instance_seg_model
+from isit.prediction.apply_model import apply_instance_seg_model, tiled_apply_instance_seg_model
 from isit.prediction.postprocessing import postprocess
 from isit.prediction.preprocessing import getfun_match_scaling_and_normalize
+from pydantic.decorator import validate_arguments
+from scipy.ndimage import find_objects
 
 logger = logging.getLogger(__name__)
 __OME_NGFF_VERSION__ = fractal_tasks_core.__OME_NGFF_VERSION__
@@ -160,7 +159,7 @@ def rdcnet_segmentation(
     metadata: Dict[str, Any],
     # Task-specific arguments
     level: int,
-    channel: Channel,
+    channel: ChannelInputModel,
     model_path: str,
     input_ROI_table: str = "FOV_ROI_table",
     output_ROI_table: Optional[str] = None,
@@ -593,7 +592,7 @@ def rdcnet_segmentation(
             f"{in_path}/{component}/tables/{output_ROI_table}"
         )
         table_attrs = {
-            "type": "ngff:region_table",
+            "type": "masking_roi_table",
             "region": {"path": f"../labels/{output_label_name}"},
             "instance_key": "label",
         }
@@ -602,7 +601,6 @@ def rdcnet_segmentation(
             output_ROI_table,
             bbox_table,
             overwrite=overwrite,
-            logger=logger,
             table_attrs=table_attrs,
         )
 
