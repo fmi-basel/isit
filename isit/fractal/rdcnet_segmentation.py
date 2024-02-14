@@ -149,7 +149,6 @@ def init_segmentation_2D(model_path, core_count):
     return model
 
 
-@validate_arguments
 def rdcnet_segmentation(
     *,
     # Fractal arguments
@@ -166,6 +165,7 @@ def rdcnet_segmentation(
     output_label_name: Optional[str] = None,
     use_masks: bool = False,
     relabeling: bool = True,
+    do_3D: bool = True,
     # RDCNet-related arguments
     core_count: int = 4,
     tiling_patch_size: tuple[int] = (100, 400, 400, 1),
@@ -458,8 +458,11 @@ def rdcnet_segmentation(
         )
         return new_label_img
 
-    do_3D = data_zyx.shape[0] > 1 and len(data_zyx.shape) == 3
-
+    check_dim = data_zyx.shape[0] > 1 and len(data_zyx.shape) == 3
+    if check_dim != do_3D:
+        logger.error(f"Dimension of input images does not match selected segmenation :( \n" \
+            f"User requested 3D segmenation {do_3D}, detected 3D data {check_dim}")
+        raise ValueError("Dimension of input images does not match selected segmenation")
     # Initializing models
     if do_3D:
         # Initialize the 3D model
