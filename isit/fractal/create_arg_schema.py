@@ -38,7 +38,8 @@ if __name__ == "__main__":
 
     INNER_PYDANTIC_MODELS = {}
     task_executable_list = [
-        "rdcnet_segmentation.py",
+        "rdcnet_segmentation_2d.py",
+        "rdcnet_segmentation_3d.py"
     ]
     for ind, executable in enumerate(task_executable_list):
         logging.info(f"[{executable}] START")
