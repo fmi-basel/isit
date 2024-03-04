@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from isit.fractal.rdcnet_segmentation import rdcnet_segmentation
 from pydantic.decorator import validate_arguments
 
