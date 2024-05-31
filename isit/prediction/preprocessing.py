@@ -32,7 +32,6 @@ def getfun_match_scaling_and_normalize(src_spacing, dst_spacing):
             img_shape = img.shape
         img = rescale(img,
                        scale=scale,
-                       multichannel=False,
                        anti_aliasing=True,
                        order=1)
         img = (img - img.mean())/img.std()
