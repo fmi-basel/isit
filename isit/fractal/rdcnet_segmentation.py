@@ -152,10 +152,7 @@ def init_segmentation_2D(model_path, core_count):
 def rdcnet_segmentation(
     *,
     # Fractal arguments
-    input_paths: Sequence[str],
-    output_path: str,
-    component: str,
-    metadata: Dict[str, Any],
+    zarr_url: str,
     # Task-specific arguments
     level: int,
     channel: ChannelInputModel,
@@ -182,17 +179,7 @@ def rdcnet_segmentation(
     Run RDCNet segmentation on the ROIs of a single OME-Zarr image
 
     Args:
-        input_paths: List of input paths where the image data is stored as
-            OME-Zarrs. Should point to the parent folder containing one or many
-            OME-Zarr files, not the actual OME-Zarr file. Example:
-            `["/some/path/"]`. This task only supports a single input path.
-            (standard argument for Fractal tasks, managed by Fractal server).
-        output_path: This parameter is not used by this task.
-            (standard argument for Fractal tasks, managed by Fractal server).
-        component: Path to the OME-Zarr image in the OME-Zarr plate that is
-            processed. Example: `"some_plate.zarr/B/03/0"`.
-            (standard argument for Fractal tasks, managed by Fractal server).
-        metadata: This parameter is not used by this task.
+        zarr_url: Path or url to the individual OME-Zarr image to be processed.
             (standard argument for Fractal tasks, managed by Fractal server).
         level: Pyramid level of the image to be segmented. Choose `0` to
             process at full resolution.
@@ -239,14 +226,14 @@ def rdcnet_segmentation(
         )
 
     # Set input path
-    if len(input_paths) > 1:
-        raise NotImplementedError
-    in_path = Path(input_paths[0])
-    zarrurl = (in_path.resolve() / component).as_posix()
-    logger.info(f"{zarrurl=}")
+    #if len(input_paths) > 1:
+        #raise NotImplementedError
+    #in_path = Path(input_paths[0])
+    #zarr_url = (in_path.resolve() / component).as_posix()
+    logger.info(f"{zarr_url=}")
 
     # Read attributes from NGFF metadata
-    ngff_image_meta = load_NgffImageMeta(zarrurl)
+    ngff_image_meta = load_NgffImageMeta(zarr_url)
     num_levels = ngff_image_meta.num_levels
     coarsening_xy = ngff_image_meta.coarsening_xy
     full_res_pxl_sizes_zyx = ngff_image_meta.get_pixel_sizes_zyx(level=0)
@@ -264,7 +251,7 @@ def rdcnet_segmentation(
     # Find channel index
     try:
         tmp_channel: OmeroChannel = get_channel_from_image_zarr(
-            image_zarr_path=zarrurl,
+            image_zarr_path=zarr_url,
             wavelength_id=channel.wavelength_id,
             label=channel.label,
         )
@@ -285,11 +272,11 @@ def rdcnet_segmentation(
             output_label_name = f"label_{ind_channel}"
 
     # Load ZYX data
-    data_zyx = da.from_zarr(f"{zarrurl}/{level}")[ind_channel]
+    data_zyx = da.from_zarr(f"{zarr_url}/{level}")[ind_channel]
     logger.info(f"{data_zyx.shape=}")
 
     # Read ROI table
-    ROI_table_path = f"{zarrurl}/tables/{input_ROI_table}"
+    ROI_table_path = f"{zarr_url}/tables/{input_ROI_table}"
     ROI_table = ad.read_zarr(ROI_table_path)
 
     # Perform some checks on the ROI table
@@ -323,7 +310,7 @@ def rdcnet_segmentation(
             )
 
     # Load zattrs file
-    zattrs_file = f"{zarrurl}/.zattrs"
+    zattrs_file = f"{zarr_url}/.zattrs"
     with open(zattrs_file, "r") as jsonfile:
         zattrs = json.load(jsonfile)
 
@@ -360,7 +347,7 @@ def rdcnet_segmentation(
         ],
     }
 
-    image_group = zarr.group(zarrurl)
+    image_group = zarr.group(zarr_url)
     label_group = prepare_label_group(
         image_group,
         output_label_name,
@@ -372,8 +359,8 @@ def rdcnet_segmentation(
     logger.info(
         f"Helper function `prepare_label_group` returned {label_group=}"
     )
-    logger.info(f"Output label path: {zarrurl}/labels/{output_label_name}/0")
-    store = zarr.storage.FSStore(f"{zarrurl}/labels/{output_label_name}/0")
+    logger.info(f"Output label path: {zarr_url}/labels/{output_label_name}/0")
+    store = zarr.storage.FSStore(f"{zarr_url}/labels/{output_label_name}/0")
     label_dtype = np.uint32
 
     # Ensure that all output shapes & chunks are 3D (for 2D data: (1, y, x))
@@ -500,7 +487,7 @@ def rdcnet_segmentation(
         if use_masks:
             preprocessing_kwargs = dict(
                 region=region,
-                current_label_path=f"{zarrurl}/labels/{output_label_name}/0",
+                current_label_path=f"{zarr_url}/labels/{output_label_name}/0",
                 ROI_table_path=ROI_table_path,
                 ROI_positional_index=i_ROI,
             )
@@ -557,14 +544,14 @@ def rdcnet_segmentation(
         )
 
     logger.info(
-        f"End RDCNet_segmentation task for {zarrurl}, "
+        f"End RDCNet_segmentation task for {zarr_url}, "
         "now building pyramids."
     )
 
     # Starting from on-disk highest-resolution data, build and write to disk a
     # pyramid of coarser levels
     build_pyramid(
-        zarrurl=f"{zarrurl}/labels/{output_label_name}",
+        zarrurl=f"{zarr_url}/labels/{output_label_name}",
         overwrite=False,
         num_levels=num_levels,
         coarsening_xy=coarsening_xy,
@@ -589,10 +576,10 @@ def rdcnet_segmentation(
         bbox_table.obs = labels
 
         # Write to zarr group
-        image_group = zarr.group(f"{in_path}/{component}")
+        image_group = zarr.group(f"{zarr_url}")
         logger.info(
             "Now writing bounding-box ROI table to "
-            f"{in_path}/{component}/tables/{output_ROI_table}"
+            f"{zarr_url}/tables/{output_ROI_table}"
         )
         table_attrs = {
             "type": "masking_roi_table",

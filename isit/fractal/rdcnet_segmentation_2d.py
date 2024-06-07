@@ -18,10 +18,7 @@ logger = logging.getLogger(__name__)
 def rdcnet_segmentation_2d(
     *,
     # Fractal arguments
-    input_paths: Sequence[str],
-    output_path: str,
-    component: str,
-    metadata: Dict[str, Any],
+    zarr_url: str,
     # Task-specific arguments
     level: int,
     channel: ChannelInputModel,
@@ -34,24 +31,14 @@ def rdcnet_segmentation_2d(
     # RDCNet-related arguments
     core_count: int = 4,
     # 2D RDCNet-related arguments
-    patch_size: tuple[int] = [1300, 1300, 1],
+    patch_size: tuple[int, int, int] = [1300, 1300, 1],
     overwrite: bool = True,
 ) -> Dict[str, Any]:
     """
     Run RDCNet segmentation on the ROIs of a single OME-Zarr MIP image
     Performs 2d segmentation.
     Args:
-        input_paths: List of input paths where the image data is stored as
-            OME-Zarrs. Should point to the parent folder containing one or many
-            OME-Zarr files, not the actual OME-Zarr file. Example:
-            `["/some/path/"]`. This task only supports a single input path.
-            (standard argument for Fractal tasks, managed by Fractal server).
-        output_path: This parameter is not used by this task.
-            (standard argument for Fractal tasks, managed by Fractal server).
-        component: Path to the OME-Zarr image in the OME-Zarr plate that is
-            processed. Example: `"some_plate.zarr/B/03/0"`.
-            (standard argument for Fractal tasks, managed by Fractal server).
-        metadata: This parameter is not used by this task.
+        zarr_url: Path or url to the individual OME-Zarr image to be processed.
             (standard argument for Fractal tasks, managed by Fractal server).
         level: Pyramid level of the image to be segmented. Choose `0` to
             process at full resolution.
@@ -78,10 +65,7 @@ def rdcnet_segmentation_2d(
         overwrite: If `True`, overwrite the task output.
     """
     return rdcnet_segmentation(
-        input_paths = input_paths,
-        output_path = output_path,
-        component = component,
-        metadata = metadata,
+        zarr_url = zarr_url,
         level = level,
         channel = channel,
         model_path = model_path,

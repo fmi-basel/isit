@@ -2,6 +2,8 @@ from setuptools import setup, find_packages
 
 contrib = [
     'Raphael Ortiz',
+    "Franziska Moos",
+    "Enrico Tagliavini"
 ]
 
 # setup.
@@ -20,10 +22,12 @@ setup(name='isit',
           'luigi',
           'tensorflow<2.8',
           'dl-utils @ git+https://github.com/fmi-basel/dl-utils@dev-enrico',
-          'improc @ git+https://github.com/fmi-basel/improc',
-          'inter_view @ git+https://github.com/fmi-basel/inter-view',
+          'improc @ git+https://github.com/fmi-basel/improc@dev-franzi',
+          #'inter_view @ git+https://github.com/fmi-basel/inter-view',
       ],
       extras_require={
-          "fractal-tasks-core": ["fractal-tasks-core==0.14.1"],
+          "fractal-tasks-core": ["fractal-tasks-core==1.0.2"],
           },
-      zip_safe=False)
+      zip_safe=False,
+      data_files = [("", ["isit/__FRACTAL_MANIFEST__.json"])]
+      )
