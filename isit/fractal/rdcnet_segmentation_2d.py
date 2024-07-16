@@ -23,7 +23,7 @@ def rdcnet_segmentation_2d(
     level: int,
     channel: ChannelInputModel,
     model_path: str,
-    input_ROI_table: str = "FOV_ROI_table",
+    input_ROI_table: str = "well_ROI_table",
     output_ROI_table: Optional[str] = None,
     output_label_name: Optional[str] = None,
     use_masks: bool = False,

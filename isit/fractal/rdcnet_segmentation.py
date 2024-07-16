@@ -21,6 +21,8 @@ from typing import Dict
 from typing import Optional
 from typing import Sequence
 
+import tifffile as tif
+
 import anndata as ad
 import dask.array as da
 import numpy as np
@@ -62,7 +64,7 @@ from scipy.ndimage import find_objects
 logger = logging.getLogger(__name__)
 __OME_NGFF_VERSION__ = fractal_tasks_core.__OME_NGFF_VERSION__
 
-def segment_ROI_3D(img, model_fun, tiling_patch_size, tiling_border, peak_min_distance, model_spacing, labels_fill_holes, labels_size_threshold, labels_keep_largest, labels_sequential, image_spacing, num_post_processes):
+def segment_ROI_3D(img, model_fun, tiling_patch_size, tiling_border, peak_min_distance, model_spacing, labels_fill_holes, labels_size_threshold, labels_keep_largest, labels_sequential, image_spacing, num_post_processes, num_labels_tot, relabeling, label_dtype):
     """
     Applies 3D RDCNet segmenation to img
     img needs to be 4D to work with the wrapper task, but RDCNet internally
@@ -93,6 +95,22 @@ def segment_ROI_3D(img, model_fun, tiling_patch_size, tiling_border, peak_min_di
             image_spacing,
             num_post_processes)
     logger.info("[segment_ROI_3D] Postprocessing Done")
+
+    # Shift labels and update relabeling counters
+    if relabeling:
+        num_labels_roi = np.max(labels)
+        labels[labels > 0] += num_labels_tot["num_labels_tot"]
+        num_labels_tot["num_labels_tot"] += num_labels_roi
+
+        # Check that total number of labels is under control
+        if num_labels_tot["num_labels_tot"] > np.iinfo(label_dtype).max:
+            nlt = num_labels_tot["num_labels_tot"]
+            raise Exception(
+                "ERROR in re-labeling:"
+                f"Reached {nlt} labels, "
+                f"but dtype={label_dtype}"
+            )
+
     return labels
 
 def init_segmentation_3D(model_path,core_count,image_spacing):
@@ -113,7 +131,7 @@ def init_segmentation_3D(model_path,core_count,image_spacing):
 
     return model, model_spacing, model_fun, peak_min_distance
 
-def segment_ROI_2D(img, model, image_spacing, patch_size):
+def segment_ROI_2D(img, model, image_spacing, patch_size, num_labels_tot, relabeling, label_dtype):
     """
     Applies 2D RDCNet segmenation to img
 
@@ -138,6 +156,21 @@ def segment_ROI_2D(img, model, image_spacing, patch_size):
         mask = pred[loc] == l
         if loc:
             label_image[loc][mask] = l
+
+    # Shift labels and update relabeling counters
+    if relabeling:
+        num_labels_roi = np.max(label_image)
+        label_image[label_image > 0] += num_labels_tot["num_labels_tot"]
+        num_labels_tot["num_labels_tot"] += num_labels_roi
+
+        # Check that total number of labels is under control
+        if num_labels_tot["num_labels_tot"] > np.iinfo(label_dtype).max:
+            nlt = num_labels_tot["num_labels_tot"]
+            raise Exception(
+                "ERROR in re-labeling:"
+                f"Reached {nlt} labels, "
+                f"but dtype={label_dtype}"
+            )
 
     return label_image
 
@@ -275,6 +308,7 @@ def rdcnet_segmentation(
     data_zyx = da.from_zarr(f"{zarr_url}/{level}")[ind_channel]
     logger.info(f"{data_zyx.shape=}")
 
+    logger.info(f"Loading ROI table {input_ROI_table}")
     # Read ROI table
     ROI_table_path = f"{zarr_url}/tables/{input_ROI_table}"
     ROI_table = ad.read_zarr(ROI_table_path)
@@ -387,7 +421,7 @@ def rdcnet_segmentation(
 
     # Counters for relabeling
     if relabeling:
-        num_labels_tot = 0
+        num_labels_tot = {"num_labels_tot": 0}
 
     # Iterate over ROIs
     num_ROIs = len(list_indices)
@@ -400,7 +434,10 @@ def rdcnet_segmentation(
         kwargs_segment_ROI_2D = dict(
             model = model,
             image_spacing = actual_res_pxl_sizes_zyx[1:],
-            patch_size = patch_size
+            patch_size = patch_size,
+            num_labels_tot = num_labels_tot,
+            relabeling = relabeling,
+            label_dtype = label_dtype
         )
         # Call segment_ROI through the masked-loading wrapper, which includes
         # pre/post-processing functions if needed
@@ -410,7 +447,7 @@ def rdcnet_segmentation(
             function=segment_ROI_2D,
             kwargs=kwargs_segment_ROI_2D,
             use_masks=use_masks,
-            preprocessing_kwargs=preprocessing_kwargs,
+            preprocessing_kwargs=preprocessing_kwargs
         )
 
         # Fillup a 3D Volume to be compatible with saving roi later
@@ -431,7 +468,10 @@ def rdcnet_segmentation(
             labels_keep_largest = labels_keep_largest,
             labels_sequential = labels_sequential,
             image_spacing = actual_res_pxl_sizes_zyx,
-            num_post_processes = core_count
+            num_post_processes = core_count,
+            num_labels_tot = num_labels_tot,
+            relabeling = relabeling,
+            label_dtype = label_dtype
         )
 
         # Call segment_ROI through the masked-loading wrapper, which includes
@@ -496,27 +536,6 @@ def rdcnet_segmentation(
 
         logger.info(f"Finished segmentation for ROI {i_ROI+1}/{num_ROIs}")
 
-        # Shift labels and update relabeling counters
-        if relabeling:
-            logger.info(f"Starting relabeling for ROI {i_ROI+1}")
-            num_labels_roi = np.max(new_label_img)
-            new_label_img[new_label_img > 0] += num_labels_tot
-            num_labels_tot += num_labels_roi
-
-            # Write some logs
-            logger.info(
-                f"ROI {indices}, " f"{num_labels_roi=}, " f"{num_labels_tot=}"
-            )
-
-            # Check that total number of labels is under control
-            if num_labels_tot > np.iinfo(label_dtype).max:
-                raise Exception(
-                    "ERROR in re-labeling:"
-                    f"Reached {num_labels_tot} labels, "
-                    f"but dtype={label_dtype}"
-                )
-            logger.info(f"Finished relabeling for ROI {i_ROI+1}")
-
         if output_ROI_table:
             logger.info(f"Starting ROI table processing for ROI {i_ROI+1}")
             bbox_df = array_to_bounding_box_table(
@@ -566,7 +585,7 @@ def rdcnet_segmentation(
         df_well = pd.concat(bbox_dataframe_list, axis=0, ignore_index=True)
         df_well.index = df_well.index.astype(str)
         # Extract labels and drop them from df_well
-        labels = pd.DataFrame(df_well["label"].astype(str))
+        labels = pd.DataFrame(df_well["label"].astype(float))
         df_well.drop(labels=["label"], axis=1, inplace=True)
         # Convert all to float (warning: some would be int, in principle)
         bbox_dtype = np.float32
