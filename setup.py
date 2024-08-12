@@ -8,7 +8,7 @@ contrib = [
 
 # setup.
 setup(name='isit',
-      version='0.1.4',
+      version='0.1.5',
       description='2D/3D instance segmentation with iterative training',
       author=', '.join(contrib),
       packages=find_packages(exclude=['tests']),
@@ -26,7 +26,7 @@ setup(name='isit',
           #'inter_view @ git+https://github.com/fmi-basel/inter-view',
       ],
       extras_require={
-          "fractal-tasks-core": ["fractal-tasks-core==1.0.2"],
+          "fractal-tasks-core": ["fractal-tasks-core==1.2.1"],
           },
       zip_safe=False,
       data_files = [("", ["isit/__FRACTAL_MANIFEST__.json"])]

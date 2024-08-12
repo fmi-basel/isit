@@ -3,7 +3,7 @@
 import logging
 
 from isit.fractal.rdcnet_segmentation import rdcnet_segmentation
-from pydantic.decorator import validate_arguments
+from pydantic import validate_call
 
 from typing import Any
 from typing import Dict
@@ -14,7 +14,7 @@ from fractal_tasks_core.channels import ChannelInputModel
 
 logger = logging.getLogger(__name__)
 
-@validate_arguments
+@validate_call
 def rdcnet_segmentation_3d(
     *,
     # Fractal arguments

@@ -35,6 +35,7 @@ from fractal_tasks_core.channels import (
     ChannelInputModel,
     ChannelNotFoundError,
     get_channel_from_image_zarr,
+    get_omero_channel_list,
     OmeroChannel,
 )
 from fractal_tasks_core.ngff.zarr_utils import load_NgffImageMeta
@@ -48,7 +49,9 @@ from fractal_tasks_core.roi import (
     get_overlapping_pairs_3D,
     is_ROI_table_valid,
     load_region,
+    create_roi_table_from_df_list
 )
+
 from fractal_tasks_core.labels import prepare_label_group
 from fractal_tasks_core.tables import write_table
 from fractal_tasks_core.utils import rescale_datasets
@@ -58,7 +61,7 @@ from isit.prediction.apply_model import dynamically_apply_instance_seg_model
 from isit.prediction.apply_model import apply_instance_seg_model, tiled_apply_instance_seg_model
 from isit.prediction.postprocessing import postprocess
 from isit.prediction.preprocessing import getfun_match_scaling_and_normalize
-from pydantic.decorator import validate_arguments
+from pydantic import validate_call
 from scipy.ndimage import find_objects
 
 logger = logging.getLogger(__name__)
@@ -473,7 +476,6 @@ def rdcnet_segmentation(
             relabeling = relabeling,
             label_dtype = label_dtype
         )
-
         # Call segment_ROI through the masked-loading wrapper, which includes
         # pre/post-processing functions if needed
         new_label_img = masked_loading_wrapper(
@@ -539,16 +541,16 @@ def rdcnet_segmentation(
         if output_ROI_table:
             logger.info(f"Starting ROI table processing for ROI {i_ROI+1}")
             bbox_df = array_to_bounding_box_table(
-                new_label_img, actual_res_pxl_sizes_zyx
+                new_label_img,
+                actual_res_pxl_sizes_zyx,
+                origin_zyx = (s_z, s_y, s_x)
             )
 
             bbox_dataframe_list.append(bbox_df)
 
-            overlap_list = []
-            for df in bbox_dataframe_list:
-                overlap_list.extend(
-                    get_overlapping_pairs_3D(df, full_res_pxl_sizes_zyx)
-                )
+            overlap_list = get_overlapping_pairs_3D(
+                bbox_df, full_res_pxl_sizes_zyx
+            )
             if len(overlap_list) > 0:
                 logger.warning(
                     f"{len(overlap_list)} bounding-box pairs overlap"
@@ -571,7 +573,7 @@ def rdcnet_segmentation(
     # pyramid of coarser levels
     build_pyramid(
         zarrurl=f"{zarr_url}/labels/{output_label_name}",
-        overwrite=False,
+        overwrite=overwrite,
         num_levels=num_levels,
         coarsening_xy=coarsening_xy,
         chunksize=chunks,
@@ -581,21 +583,12 @@ def rdcnet_segmentation(
     logger.info("End building pyramids")
 
     if output_ROI_table:
-        # Concatenate all ROI dataframes
-        df_well = pd.concat(bbox_dataframe_list, axis=0, ignore_index=True)
-        df_well.index = df_well.index.astype(str)
-        # Extract labels and drop them from df_well
-        labels = pd.DataFrame(df_well["label"].astype(float))
-        df_well.drop(labels=["label"], axis=1, inplace=True)
-        # Convert all to float (warning: some would be int, in principle)
-        bbox_dtype = np.float32
-        df_well = df_well.astype(bbox_dtype)
-        # Convert to anndata
-        bbox_table = ad.AnnData(df_well, dtype=bbox_dtype)
-        bbox_table.obs = labels
+        bbox_table = create_roi_table_from_df_list(bbox_dataframe_list)
+        logging.info("Length of bbox_table is {}".format(bbox_table.shape[0]))
+        logging.info("Number of labels is {}".format(bbox_table.obs.shape[0]))
 
         # Write to zarr group
-        image_group = zarr.group(f"{zarr_url}")
+        image_group = zarr.group(zarr_url)
         logger.info(
             "Now writing bounding-box ROI table to "
             f"{zarr_url}/tables/{output_ROI_table}"
