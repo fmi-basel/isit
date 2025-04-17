@@ -545,6 +545,8 @@ def rdcnet_segmentation(
                 actual_res_pxl_sizes_zyx,
                 origin_zyx = (s_z, s_y, s_x)
             )
+            # Cast label column to int to avoid issues with ROI table
+            bbox_df["label"] = bbox_df["label"].astype(int)
 
             bbox_dataframe_list.append(bbox_df)
 
