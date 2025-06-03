@@ -26,7 +26,7 @@ setup(name='isit',
           #'inter_view @ git+https://github.com/fmi-basel/inter-view',
       ],
       extras_require={
-          "fractal-tasks-core": ["fractal-tasks-core==1.2.1"],
+          "fractal-tasks-core": ["fractal-tasks-core==1.2.2"],
           },
       zip_safe=False,
       data_files = [("", ["isit/__FRACTAL_MANIFEST__.json"])]
