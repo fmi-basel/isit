@@ -37,7 +37,9 @@ def segment_ROI(img, model_fun, tiling_patch_size, tiling_border, peak_min_dista
 			labels_keep_largest,
 			labels_sequential,
 			image_spacing,
-			num_post_processes)
+			num_post_processes,
+			dtype=np.uint32
+		)
 	return labels
 
 def isit_segmentation(io_image_paths, model_path, labels_fill_holes, labels_size_threshold, labels_keep_largest, labels_sequential, image_spacing, tiling_patch_size, tiling_border, core_count = 4):

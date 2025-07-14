@@ -96,7 +96,9 @@ def segment_ROI_3D(img, model_fun, tiling_patch_size, tiling_border, peak_min_di
             labels_keep_largest,
             labels_sequential,
             image_spacing,
-            num_post_processes)
+            num_post_processes,
+            dtpye=label_dtype
+    )
     logger.info("[segment_ROI_3D] Postprocessing Done")
 
     # Shift labels and update relabeling counters
