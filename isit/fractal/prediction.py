@@ -1,0 +1,69 @@
+import logging
+import numpy as np
+import os
+import tensorflow as tf
+import tifffile
+
+from traceback import format_exc
+
+from isit.prediction.apply_model import dynamically_apply_instance_seg_model
+from isit.prediction.postprocessing import postprocess
+from isit.prediction.preprocessing import getfun_match_scaling_and_normalize
+
+def load_image(input_image):
+	img = tifffile.imread(input_image).astype(np.float32)
+	return img
+
+def save_image(output_image, img):
+	return tifffile.imwrite(output_image, img)
+
+def segment_ROI(img, model_fun, tiling_patch_size, tiling_border, peak_min_distance, model_spacing, labels_fill_holes, labels_size_threshold, labels_keep_largest, labels_sequential, image_spacing, num_post_processes):
+	img, _, img_shape = preprocessing_fun(img, '', False)
+	img_shape = tf.convert_to_tensor(img_shape)
+	img = tf.convert_to_tensor(img)
+	labels, _, _ = dynamically_apply_instance_seg_model(
+			model_fun,
+			img,
+			tf.convert_to_tensor(''), # no image output required
+			img_shape,
+			tiling_patch_size, tiling_border,
+			peak_min_distance,
+			model_spacing)
+	labels = postprocess(
+			labels,
+			img_shape,
+			labels_fill_holes,
+			labels_size_threshold,
+			labels_keep_largest,
+			labels_sequential,
+			image_spacing,
+			num_post_processes,
+			dtype=np.uint32
+		)
+	return labels
+
+def isit_segmentation(io_image_paths, model_path, labels_fill_holes, labels_size_threshold, labels_keep_largest, labels_sequential, image_spacing, tiling_patch_size, tiling_border, core_count = 4):
+	logger = logging.getLogger('luigi-interface')
+	
+	# the following will limit the amount of CPU cores TensorFlow will use for CPU tasks.
+	# there is one CPU only task at the end of the dynamically_apply_instance_seg_model() function
+	# see also https://stackoverflow.com/questions/57925061/how-can-i-reduce-the-number-of-cpus-used-by-tensorlfow-keras
+	tf.config.threading.set_intra_op_parallelism_threads(core_count)
+	tf.config.threading.set_inter_op_parallelism_threads(core_count)
+	
+	model = tf.saved_model.load(model_path)
+	model_spacing = model.signatures['get_config']()['spacing'].numpy()
+
+	peak_min_distance = model.signatures['get_config']()['peak_min_distance'].numpy()
+	model_fun = model.signatures['model_fun']
+
+	global preprocessing_fun
+	preprocessing_fun = getfun_match_scaling_and_normalize(image_spacing, model_spacing)
+
+	for input_image, out_file in io_image_paths:
+		logger.info('Loading and processing image: %s' % input_image)
+		img = load_image(input_image)
+		labels = segment_ROI(img, model_fun, tiling_patch_size, tiling_border, peak_min_distance, model_spacing, labels_fill_holes, labels_size_threshold, labels_keep_largest, labels_sequential, image_spacing, core_count)
+		logger.info('Saving labels to: %s' % out_file)
+		save_image(out_file, labels)
+	return

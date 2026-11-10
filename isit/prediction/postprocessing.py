@@ -17,14 +17,14 @@ def queue_worker(queue, fun):
 
 
 def postprocess(labeling, img_shape, labels_fill_holes, labels_size_threshold, labels_keep_largest,
-                labels_sequential, image_spacing):
+                labels_sequential, image_spacing, num_processes = None, dtpye=np.uint16):
     smooth_sigma = np.max(np.array(img_shape) / np.array(labeling.shape)) * np.sqrt(2)
     labeling = resize(labeling.astype(np.float32),
                       output_shape=img_shape,
                       order=0,
-                      preserve_range=True).astype(np.uint16)
+                      preserve_range=True).astype(dtpye)
     labeling = smooth_label_edges(labeling, smooth_sigma)
-    labeling = labeling.astype(np.uint16)
+    labeling = labeling.astype(dtpye)
 
     labeling = clean_up_labels(labeling,
                                fill_holes=labels_fill_holes,
@@ -32,20 +32,21 @@ def postprocess(labeling, img_shape, labels_fill_holes, labels_size_threshold, l
                                size_threshold=labels_size_threshold,
                                keep_largest=labels_keep_largest,
                                sequential=labels_sequential,
-                               spacing=image_spacing)
+                               spacing=image_spacing,
+                               processes=num_processes)
     return labeling
 
 
 def get_postprocess_and_save_fun(labels_fill_holes, labels_size_threshold,
                                  labels_keep_largest, labels_sequential,
-                                 image_spacing):
+                                 image_spacing, dtype=np.uint16):
     def post_process_and_save(element):
         labeling, outpath, img_shape = element
         labeling = postprocess(labeling, img_shape, labels_fill_holes,
                                labels_size_threshold, labels_keep_largest,
-                               labels_sequential, image_spacing)
+                               labels_sequential, image_spacing, dtype=dtype)
 
         os.makedirs(os.path.dirname(outpath), exist_ok=True)
-        imsave(outpath, labeling.astype(np.uint16), compress=9, check_contrast=False)
+        imsave(outpath, labeling.astype(dtype), compress=9, check_contrast=False)
 
     return post_process_and_save

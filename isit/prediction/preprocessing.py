@@ -25,11 +25,13 @@ def getfun_match_scaling_and_normalize(src_spacing, dst_spacing):
     """
     scale = np.array(src_spacing) / np.array(dst_spacing)
 
-    def match_scaling_and_normalize(img, file):
-        img_shape = tf.convert_to_tensor(img.shape.as_list())
+    def match_scaling_and_normalize(img, file, convert_shape = True):
+        if convert_shape:
+            img_shape = tf.convert_to_tensor(img.shape.as_list())
+        else:
+            img_shape = img.shape
         img = rescale(img,
                        scale=scale,
-                       multichannel=False,
                        anti_aliasing=True,
                        order=1)
         img = (img - img.mean())/img.std()
